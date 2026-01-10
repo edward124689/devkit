@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevKit - All-in-One Developer Toolset</title>
+    <!-- Tailwind CSS 3.4 CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Noto Sans TC -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- 核心外部庫 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/1.0.11/pako.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/upng-js/2.1.0/UPNG.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
+    <style>
+        :root { --primary: #4f46e5; --bg-soft: #f8fafc; }
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: var(--bg-soft); }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        
+        input[type="range"] { -webkit-appearance: none; background: #e2e8f0; height: 6px; border-radius: 10px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 22px; width: 22px; background: white; border: 4px solid var(--primary); border-radius: 50%; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.2s; }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .glass-effect { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); }
+        
+        #strengthBar { transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s ease; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 選單高亮樣式 */
+        .nav-btn-active { background-color: #4f46e5 !important; color: white !important; font-weight: 700; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2); }
+        .nav-btn-inactive { color: #64748b; transition: all 0.2s; }
+        .nav-btn-inactive:hover { background-color: #f1f5f9; color: #1e293b; }
+
+        /* 密碼選項卡片 UI */
+        .pass-opt-card { border: 2px solid #f1f5f9; padding: 1.25rem; border-radius: 1.25rem; transition: all 0.2s; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .pass-opt-card:hover { border-color: #e2e8f0; background-color: #f8fafc; }
+        .pass-opt-card.active { border-color: #4f46e5; background-color: #eef2ff; color: #4338ca; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1); }
+
+        /* 佔位圖比例卡片 UI */
+        .ratio-card { border: 2px solid #f1f5f9; padding: 1rem; border-radius: 1.25rem; transition: all 0.2s; background: white; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; min-width: 90px; }
+        .ratio-card:hover:not(.active) { border-color: #e2e8f0; background-color: #f8fafc; }
+        .ratio-card.active { border-color: #4f46e5; background-color: #eef2ff; color: #4338ca; transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1); }
+        .ratio-visual { border: 2px solid currentColor; border-radius: 4px; opacity: 0.8; background: transparent; }
+
+        /* 圖片比較標籤 */
+        .comparison-label { position: absolute; top: 1rem; left: 1rem; background: rgba(0,0,0,0.6); color: white; padding: 4px 12px; border-radius: 99px; font-size: 10px; font-weight: 900; letter-spacing: 0.05em; pointer-events: none; z-index: 40; backdrop-filter: blur(4px); }
+
+        /* JSON Tree 樣式 */
+        .json-tree-node { position: relative; padding-left: 1.5rem; border-left: 1px solid rgba(148, 163, 184, 0.15); margin-left: 0.6rem; }
+        .json-tree-toggle { 
+            position: absolute; left: -0.75rem; top: 4px; width: 1.2rem; height: 1.2rem; 
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s; color: var(--primary); font-weight: bold; background: #1e293b; border-radius: 4px; font-size: 10px;
+        }
+        .json-tree-toggle.collapsed { transform: rotate(-90deg); }
+        .json-tree-children.hidden { display: none; }
+    </style>
+</head>
+<body class="text-slate-900 overflow-hidden selection:bg-indigo-100 selection:text-indigo-900">
+
+    <div class="flex h-screen overflow-hidden text-left">
+        
+        <div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/40 z-40 lg:hidden hidden backdrop-blur-sm transition-opacity duration-300"></div>
+
+        <!-- 側邊導覽欄 -->
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transition-all duration-300 transform -translate-x-full lg:translate-x-0 lg:relative flex flex-col shadow-2xl lg:shadow-none">
+            <div class="p-8 flex items-center justify-between border-b border-slate-50">
+                <h1 class="text-2xl font-black text-indigo-600 flex items-center gap-3">
+                    <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" /></svg>
+                    </div>
+                    <span>DevKit</span>
+                </h1>
+                <button id="closeSidebar" class="lg:hidden p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            
+            <nav class="flex-1 px-4 space-y-1.5 overflow-y-auto scrollbar-hide py-6" id="navLinks">
+                <button data-tab="guide" class="nav-btn w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-200">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span class="text-sm tracking-wide" data-t="nav.guide">User Guide</span>
+                </button>
+                <button data-tab="excel" class="nav-btn w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-200">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    <span class="text-sm tracking-wide" data-t="nav.excel">Excel to JSON</span>
+                </button>
+                <button data-tab="json" class="nav-btn w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-200">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+                    <span class="text-sm tracking-wide" data-t="nav.json">JSON Viewer</span>
+                </button>
+                <button data-tab="image" class="nav-btn w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-200">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    <span class="text-sm tracking-wide" data-t="nav.image">Image Tools</span>
+                </button>
+                <button data-tab="generator" class="nav-btn w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-200">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>
+                    <span class="text-sm tracking-wide" data-t="nav.generator">Placeholder</span>
+                </button>
+                <button data-tab="password" class="nav-btn w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-200">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    <span class="text-sm tracking-wide" data-t="nav.password">Secure Password</span>
+                </button>
+                <button data-tab="lorem" class="nav-btn w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-200">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
+                    <span class="text-sm tracking-wide" data-t="nav.lorem">Lorem Ipsum</span>
+                </button>
+            </nav>
+
+            <div class="p-6 border-t border-slate-100">
+                <div class="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 mx-auto">
+                    <button onclick="window.changeLang('en')" id="btnEn" class="flex-1 py-2 text-xs font-black rounded-xl transition-all">EN</button>
+                    <button onclick="window.changeLang('zh-Hant')" id="btnZh" class="flex-1 py-2 text-xs font-black rounded-xl transition-all">繁中</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主要內容 -->
+        <main class="flex-1 overflow-y-auto relative flex flex-col scroll-smooth">
+            <header class="sticky top-0 z-30 flex items-center justify-between p-4 bg-white/70 backdrop-blur-xl border-b border-slate-200 lg:hidden">
+                <button id="openSidebar" class="p-3 rounded-2xl bg-white border border-slate-200 text-slate-600 shadow-sm active:scale-95 transition-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
+                </button>
+                <span class="font-black text-indigo-600 tracking-tight text-lg">DevKit</span>
+                <div class="w-12"></div>
+            </header>
+
+            <div class="flex-1 w-full max-w-screen-xl mx-auto p-5 md:p-10 lg:p-16 text-left">
+                
+                <!-- Section: Guide -->
+                <section id="content-guide" class="tab-content active space-y-12 animate-fade-in text-left">
+                    <header class="max-w-3xl">
+                        <h2 class="text-4xl md:text-5xl font-black tracking-tighter text-slate-900" data-t="guide.title">How to use?</h2>
+                        <p class="text-slate-500 mt-4 text-xl leading-relaxed" data-t="guide.subtitle">Guide to mastering tools.</p>
+                    </header>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="guideSteps"></div>
+                    <div class="space-y-6 pt-10">
+                        <h3 class="text-xs font-black uppercase text-slate-400 tracking-[0.2em] px-2" data-t="guide.detailsTitle">Tool Details</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8" id="toolDetails"></div>
+                    </div>
+                </section>
+
+                <!-- Section: Excel -->
+                <section id="content-excel" class="tab-content space-y-8 animate-fade-in">
+                    <h2 class="text-4xl font-black tracking-tighter" data-t="excel.title">Excel Converter</h2>
+                    <div onclick="document.getElementById('excelInput').click()" class="border-2 border-dashed border-slate-300 rounded-[3rem] p-10 md:p-20 text-center bg-white hover:border-indigo-400 group cursor-pointer transition-all shadow-sm">
+                        <input type="file" id="excelInput" class="hidden" accept=".xlsx, .xls, .csv" onchange="window.handleExcelUpload(event)">
+                        <div class="flex flex-col items-center gap-6 mx-auto text-center">
+                            <div class="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500 group-hover:scale-110 transition-transform">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                            </div>
+                            <p class="text-2xl font-black text-slate-800" data-t="excel.drop">Drop your file here</p>
+                        </div>
+                    </div>
+                    <div id="excelOutputArea" class="hidden space-y-4 pt-6">
+                        <div class="flex justify-between items-center px-2">
+                            <h3 class="text-xs font-black uppercase text-slate-400 tracking-widest" data-t="common.result">Output</h3>
+                            <button onclick="window.copyText('excelJson')" class="text-indigo-600 font-bold text-xs hover:underline" data-t="common.copy">Copy JSON</button>
+                        </div>
+                        <pre id="excelJson" class="bg-slate-900 text-indigo-300 p-8 rounded-[2rem] overflow-x-auto text-xs max-h-[500px] shadow-2xl font-mono leading-relaxed"></pre>
+                    </div>
+                </section>
+
+                <!-- Section: JSON Viewer -->
+                <section id="content-json" class="tab-content space-y-8 animate-fade-in text-left">
+                    <h2 class="text-4xl font-black tracking-tighter" data-t="json.title">JSON Viewer</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center px-2">
+                                <span class="text-[10px] font-black uppercase text-slate-400 tracking-widest" data-t="json.input">Input</span>
+                                <button onclick="window.clearJSONInput()" class="text-red-500 font-bold text-xs hover:underline" data-t="common.clear">Clear</button>
+                            </div>
+                            <textarea id="jsonRawInput" oninput="window.validateJSONLive()" class="w-full h-[600px] bg-white border border-slate-200 p-6 rounded-[2.5rem] font-mono text-sm outline-none shadow-sm" placeholder="Paste JSON here..."></textarea>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center px-2">
+                                <span class="text-[10px] font-black uppercase text-slate-400 tracking-widest" data-t="common.result">Result</span>
+                                <div class="flex gap-4">
+                                    <button onclick="window.toggleAllJSON(true)" class="text-slate-400 font-bold text-xs hover:text-indigo-600" data-t="json.expand">Expand</button>
+                                    <button onclick="window.toggleAllJSON(false)" class="text-slate-400 font-bold text-xs hover:text-indigo-600" data-t="json.collapse">Collapse</button>
+                                    <button onclick="window.copyTreeJSON()" class="text-indigo-600 font-bold text-xs hover:underline" data-t="common.copy">Copy</button>
+                                </div>
+                            </div>
+                            <div class="relative group h-[600px]">
+                                <div id="jsonFormattedTree" class="w-full h-full bg-slate-900 text-indigo-100 p-8 rounded-[2.5rem] font-mono text-sm overflow-auto scrollbar-hide shadow-2xl text-left"></div>
+                                <div id="jsonError" class="absolute bottom-6 left-6 right-6 p-4 bg-red-500/90 backdrop-blur-md text-white rounded-2xl text-xs font-bold hidden animate-fade-in text-left"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-4 pt-4">
+                        <button onclick="window.formatJSON('beautify')" class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-indigo-700 active:scale-95 transition-all" data-t="json.beautify">Beautify</button>
+                        <button onclick="window.formatJSON('minify')" class="bg-white border-2 border-indigo-600 text-indigo-600 px-10 py-4 rounded-2xl font-black hover:bg-indigo-50 active:scale-95 transition-all" data-t="json.minify">Minify</button>
+                    </div>
+                </section>
+
+                <!-- Section: Image Tools -->
+                <section id="content-image" class="tab-content space-y-10 animate-fade-in text-left">
+                    <header class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                        <div>
+                            <h2 class="text-4xl font-black tracking-tighter" data-t="image.title">Image Tools</h2>
+                            <p class="mt-4 text-slate-500 text-lg leading-relaxed text-left" data-t="image.desc">Compress locally.</p>
+                        </div>
+                        <div id="imageActionArea" class="hidden flex gap-4">
+                            <button onclick="window.downloadZip()" class="flex items-center gap-2 bg-indigo-600 text-white px-8 py-4 rounded-2xl text-sm font-black shadow-lg hover:bg-indigo-700 active:scale-95 transition">
+                                <span data-t="image.zipDownload">Export ZIP</span>
+                            </button>
+                            <button onclick="window.clearAllImages()" class="px-6 py-4 text-red-500 font-bold hover:bg-red-50 rounded-2xl transition border border-red-100" data-t="common.clear">Clear All</button>
+                        </div>
+                    </header>
+                    <div id="imageDropZone" onclick="document.getElementById('imageInput').click()" ondragover="window.onDragOver(event)" ondragleave="window.onDragLeave(event)" ondrop="window.onImageDrop(event)" class="border-2 border-dashed border-slate-300 rounded-[3rem] p-12 md:p-16 text-center bg-white hover:border-emerald-400 group cursor-pointer transition-all shadow-sm mx-auto text-center text-center">
+                        <input type="file" id="imageInput" class="hidden" accept="image/*" multiple onchange="window.handleImageUpload(event)">
+                        <div class="flex flex-col items-center gap-6 text-emerald-500 pointer-events-none mx-auto text-center text-center">
+                            <div class="w-20 h-20 bg-emerald-50 rounded-3xl flex items-center justify-center mx-auto text-center text-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            </div>
+                            <p class="text-xl font-bold text-slate-700 tracking-tight text-center" data-t="image.drop">Drop images here</p>
+                        </div>
+                    </div>
+                    <div id="imageSettingsArea" class="hidden glass-effect sticky top-[72px] lg:top-0 z-20 py-6 border-b border-slate-200 text-left">
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-8 px-2 items-end">
+                            <div class="md:col-span-4 space-y-3">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block"><span data-t="image.quality">Quality</span>: <span id="qVal" class="text-indigo-600 font-black">80</span>%</label>
+                                <input type="range" id="qualityRange" min="1" max="100" value="80" oninput="window.updateQualityLabel(this.value)" onchange="window.applyQuality(this.value)" class="w-full">
+                            </div>
+                            <div class="md:col-span-5 space-y-3">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block" data-t="image.format">Format</label>
+                                <div class="flex p-1 bg-slate-200/50 rounded-2xl gap-0.5"><button onclick="window.setFormat('original')" id="fmtOriginal" class="flex-1 py-2 rounded-xl text-[10px] font-black transition-all">Original</button><button onclick="window.setFormat('image/webp')" id="fmtWebp" class="flex-1 py-2 rounded-xl text-[10px] font-black transition-all">WebP</button><button onclick="window.setFormat('image/png')" id="fmtPng" class="flex-1 py-2 rounded-xl text-[10px] font-black transition-all">PNG</button><button onclick="window.setFormat('image/jpeg')" id="fmtJpeg" class="flex-1 py-2 rounded-xl text-[10px] font-black transition-all">JPEG</button></div>
+                            </div>
+                            <div class="md:col-span-3 flex items-center justify-end pb-3 text-left">
+                                <label class="flex items-center gap-3 cursor-pointer text-sm font-bold text-slate-600">
+                                    <input type="checkbox" id="selectAllCheckbox" onchange="window.toggleSelectAll(this.checked)" class="w-5 h-5 rounded-lg text-indigo-600 border-slate-300">
+                                    <span data-t="image.selectAll">Select All</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="imageList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10"></div>
+                </section>
+
+                <!-- Section: Placeholder -->
+                <section id="content-generator" class="tab-content space-y-8 animate-fade-in text-left">
+                    <h2 class="text-4xl font-black tracking-tighter" data-t="generator.title">Placeholder</h2>
+                    <div class="bg-white p-8 md:p-12 rounded-[3rem] border border-slate-200 space-y-10 shadow-sm shadow-slate-200/40 text-left">
+                        <div class="space-y-4">
+                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block" data-t="generator.presets">Aspect Ratio Presets</label>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4" id="genPresetsContainer"></div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 text-left">
+                            <div class="space-y-2"><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest" data-t="generator.width">Width</label><input type="number" id="genWidth" value="1200" oninput="window.onGenInputChanged()" class="w-full p-4 rounded-2xl font-bold bg-slate-50 border-none outline-none"></div>
+                            <div class="space-y-2"><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest" data-t="generator.height">Height</label><input type="number" id="genHeight" value="630" oninput="window.onGenInputChanged()" class="w-full p-4 rounded-2xl font-bold bg-slate-50 border-none outline-none"></div>
+                            <div class="space-y-2 text-left"><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest" data-t="generator.format">Format</label><select id="genFormat" onchange="window.updateGen()" class="w-full p-4 rounded-2xl font-bold transition bg-slate-50 border-none outline-none text-left"><option value="image/png">PNG</option><option value="image/jpeg">JPG</option><option value="image/webp">WebP</option></select></div>
+                            <div class="space-y-2 text-left"><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left" data-t="generator.bgColor">BG</label><input type="color" id="genBg" value="#6366f1" oninput="window.updateGen()" class="w-full h-14 border-none bg-slate-50 rounded-2xl cursor-pointer"></div>
+                            <div class="space-y-2 text-left"><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left" data-t="generator.textColor">Text</label><input type="color" id="genTxtColor" value="#ffffff" oninput="window.updateGen()" class="w-full h-14 border-none bg-slate-50 rounded-2xl cursor-pointer"></div>
+                        </div>
+                        <div class="space-y-6 pt-4 border-t border-slate-50 text-left">
+                            <div class="flex justify-between items-center text-left">
+                                <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest text-left" data-t="common.preview">Preview</h3>
+                                <button onclick="window.downloadGen()" class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl hover:bg-indigo-700 active:scale-95 transition text-left" data-t="common.download">Download</button>
+                            </div>
+                            <div class="bg-slate-100 rounded-[3rem] p-10 flex items-center justify-center min-h-[400px] border-4 border-dashed border-slate-200 overflow-hidden text-center mx-auto text-left"><img id="genPreview" class="max-w-full h-auto object-contain shadow-2xl rounded-2xl border-8 border-white mx-auto"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Secure Password -->
+                <section id="content-password" class="tab-content space-y-12 animate-fade-in text-center text-left">
+                    <header class="text-left"><h2 class="text-4xl md:text-5xl font-black tracking-tighter" data-t="password.title">Secure Password</h2><p class="text-slate-500 text-lg mx-auto max-w-xl text-left" data-t="password.desc">Random strong password generator.</p></header>
+                    <div class="bg-white p-6 md:p-12 rounded-[4rem] border border-slate-200 space-y-8 shadow-xl shadow-slate-200/40 max-w-4xl mx-auto text-center text-left">
+                        <div class="relative group text-center text-center"><div id="passwordDisplayContainer" class="w-full bg-slate-50 border-4 border-slate-100 p-8 rounded-[2.5rem] min-h-[120px] flex items-center justify-center break-all transition-all duration-300 font-bold text-3xl md:text-5xl text-indigo-600 tracking-widest text-center text-left"><span id="passValText"></span></div><button onclick="window.copyPassValue()" class="absolute -right-4 top-1/2 -translate-y-1/2 p-6 bg-indigo-600 text-white shadow-2xl hover:bg-indigo-700 hover:scale-105 rounded-3xl transition-all active:scale-90 border-4 border-white text-left"><svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg></button></div>
+                        <div class="space-y-3 px-4 text-left"><div class="flex justify-between items-center text-xs font-black uppercase tracking-widest text-slate-400 text-left text-left text-left"><span data-t="password.strength">Strength</span><span id="strengthText" class="text-slate-600 font-bold text-left">---</span></div><div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden text-left text-left text-left text-left text-left text-left"><div id="strengthBar" class="h-full w-0 bg-slate-300 rounded-full"></div></div></div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-12 text-left pt-6 text-left text-left">
+                            <div class="space-y-6 text-left text-left text-left text-left text-left text-left text-left text-left text-left text-left"><label class="text-xs font-black text-slate-400 uppercase tracking-widest block text-left"><span data-t="password.length">Length</span>: <span id="passLenVal" class="text-indigo-600">16</span></label><input type="range" id="passLen" min="8" max="64" value="16" oninput="window.updatePassUI();" class="w-full text-left"></div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left text-left text-left text-left text-left text-left text-left text-left text-left text-left" id="passOptsContainer"></div>
+                        </div>
+                        <button onclick="window.generatePass()" class="w-full bg-slate-900 text-white py-6 rounded-[2.5rem] font-black text-xl hover:bg-indigo-600 transition-all uppercase active:scale-95 text-center text-left text-left text-left" data-t="password.btn">Generate</button>
+                    </div>
+                </section>
+
+                <!-- Section: Lorem Ipsum -->
+                <section id="content-lorem" class="tab-content space-y-10 animate-fade-in text-left">
+                    <h2 class="text-4xl font-black tracking-tighter text-left" data-t="lorem.title">Lorem Ipsum</h2>
+                    <div class="bg-white p-8 md:p-12 rounded-[3.5rem] border border-slate-200 space-y-10 shadow-sm text-left">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-10 text-left text-left text-left">
+                            <div class="space-y-3 text-left"><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block text-left" data-t="lorem.mode">Mode</label><select id="loremMode" onchange="window.generateLorem()" class="w-full p-4 rounded-2xl font-bold text-slate-700 bg-slate-50 border-none outline-none text-left"></select></div>
+                            <div class="space-y-3 text-left text-left">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block text-left" data-t="lorem.variant">Variant</label>
+                                <div class="flex p-1.5 bg-slate-100 rounded-2xl text-left"><button onclick="window.setLoremVar('hk')" id="varHk" class="flex-1 py-2.5 text-xs font-black rounded-xl transition-all text-left">Trad</button><button onclick="window.setLoremVar('cn')" id="varCn" class="flex-1 py-2.5 text-xs font-black rounded-xl transition-all text-left">Simp</button></div>
+                            </div>
+                            <div class="space-y-3 text-left text-left text-left text-left"><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block text-left text-left" data-t="lorem.paragraphs">Paragraphs</label><input type="number" id="loremPara" value="3" min="1" max="20" oninput="window.generateLorem()" class="w-full p-4 rounded-2xl font-bold text-center bg-slate-50 border-none outline-none text-left text-left"></div>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center px-4 text-left">
+                                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left" data-t="common.preview">Preview</span>
+                                <button onclick="window.copyLorem()" class="text-amber-600 font-black hover:underline text-left text-left" data-t="common.copy">Copy</button>
+                            </div>
+                            <div id="loremResult" class="bg-slate-50 border border-slate-100 p-8 rounded-[2.5rem] text-slate-700 leading-loose max-h-[500px] overflow-y-auto font-serif text-xl selection:bg-amber-100 text-left"></div>
+                        </div>
+                        <button onclick="window.generateLorem()" class="w-full bg-amber-500 text-white py-6 rounded-[2.5rem] font-black text-xl hover:bg-amber-600 transition-all uppercase active:scale-95 text-center text-left text-left text-left text-left" data-t="common.refresh">Refresh</button>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Lightbox -->
+            <div id="lightbox" class="fixed inset-0 z-[100] bg-slate-950/95 hidden flex-col items-center justify-center p-4 md:p-10 animate-fade-in" onclick="window.closeLightbox()">
+                <div class="w-full h-full flex flex-col items-center justify-center gap-6 text-left" onclick="event.stopPropagation()">
+                    <div class="w-full max-w-7xl grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 items-center justify-center overflow-hidden mx-auto text-center text-center">
+                        <div class="relative h-full flex flex-col items-center justify-center text-center"><div class="comparison-label" data-t="image.original">Original</div><img id="lightboxImgOriginal" class="max-w-full max-h-[70vh] object-contain shadow-2xl rounded-2xl border border-white/5 bg-slate-900/50"></div>
+                        <div class="relative h-full flex flex-col items-center justify-center text-center"><div class="comparison-label" style="background:rgba(79,70,229,0.8)" data-t="image.processed">Processed</div><img id="lightboxImgCompressed" class="max-w-full max-h-[70vh] object-contain shadow-2xl rounded-2xl border border-white/5 bg-slate-900/50"></div>
+                    </div>
+                    <div id="lightboxInfo" class="w-full max-w-2xl bg-white/10 backdrop-blur-3xl p-6 rounded-[2.5rem] border border-white/20 text-white shadow-2xl mx-auto text-left text-left"></div>
+                </div>
+                <button onclick="window.closeLightbox()" class="absolute top-8 right-8 text-white transition-all p-4 bg-white/10 rounded-2xl backdrop-blur-2xl hover:bg-white/20 active:scale-90 z-[110] text-left text-left"><svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+
+            <!-- Toast -->
+            <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 md:left-auto md:right-10 md:translate-x-0 bg-slate-900 text-white px-10 py-5 rounded-[2rem] shadow-2xl flex items-center gap-4 hidden z-[101] border border-white/10 text-left text-left text-left">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                <span id="toastMsg" class="text-sm font-black tracking-wide uppercase text-left text-left text-left"></span>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        // --- 核心翻譯字典 ---
+        const TRANSLATIONS = {
+            en: {
+                brand: 'DevKit',
+                nav: { guide: 'User Guide', excel: 'Excel to JSON', json: 'JSON Viewer', image: 'Image Tools', generator: 'Placeholder', password: 'Secure Password', lorem: 'Lorem Ipsum' },
+                common: { copy: 'Copy', copied: 'Copied!', download: 'Download', clear: 'Clear All', processing: 'Processing...', refresh: 'Refresh', result: 'Result', preview: 'Preview' },
+                guide: { title: 'How to use?', subtitle: 'Guide to master developer tools.', step1: 'Select tool', step2: 'Configure', step3: 'Preview', step4: 'Download', detailsTitle: 'Tool Details', details: { excel: 'Spreadsheet parser.', json: 'Format JSON data.', image: 'Batch compression.', generator: 'UI mockups.', password: 'Secure random pass.', lorem: 'Realistic filler text.' } },
+                excel: { title: 'Excel Converter', drop: 'Drop files here' },
+                json: { title: 'JSON Viewer', input: 'Input', beautify: 'Beautify', minify: 'Minify', expand: 'Expand All', collapse: 'Collapse All' },
+                image: { title: 'Image Tools', desc: 'Optimize locally.', drop: 'Drop images', quality: 'Quality', format: 'Format', selectAll: 'Select All', zipDownload: 'Export ZIP', original: 'Original', processed: 'Processed' },
+                generator: { title: 'Placeholder', width: 'Width', height: 'Height', format: 'Format', bgColor: 'BG Color', textColor: 'Text Color', presets: 'Aspect Ratio Presets', ratioLabels: { '1:1': 'Square', '4:3': 'Classic', '16:9': 'HD Video', '2:1': 'Banner', '1:2': 'Tall' } },
+                password: { title: 'Secure Password', desc: 'Generate strong random strings.', length: 'Length', btn: 'Generate New Password', strength: 'Strength', upper: 'Uppercase', lower: 'Lowercase', numbers: 'Numbers', symbols: 'Symbols', levels: ['Too Short', 'Weak', 'Medium', 'Strong', 'Ultra Secure'] },
+                lorem: { title: 'Lorem Ipsum', mode: 'Content Mode', variant: 'Variant', paragraphs: 'Paragraphs', cn_only: 'Chinese Only', en_only: 'English Only', mixed: 'Mixed Mode', traditional: 'Trad', simplified: 'Simp' }
+            },
+            'zh-Hant': {
+                brand: '開發者工具箱',
+                nav: { guide: '使用指南', excel: 'Excel 轉 JSON', json: 'JSON 檢視器', image: '圖片處理工具', generator: '佔位圖片產生器', password: '安全強密碼', lorem: '假字產生器' },
+                common: { copy: '複製', copied: '已複製！', download: '下載', clear: '清空所有', processing: '處理中...', refresh: '重新產生', result: '結果', preview: '預覽' },
+                guide: { title: '如何使用 DevKit？', subtitle: '快速掌握工具操作指引。', step1: '選取工具', step2: '設定參數', step3: '即時預覽', step4: '下載結果', detailsTitle: '工具詳情', details: { excel: '支援 Excel/CSV 轉 JSON。', json: 'JSON 格式化與摺疊處理。', image: '批次壓縮與量化處理。', generator: '產生測試用佔位圖處理。', password: '密碼學隨機強密碼產生。', lorem: '產生真實排版文章。' } },
+                excel: { title: 'Excel 轉換器', drop: '拖放 Excel 或 CSV 至此' },
+                json: { title: 'JSON 檢視器', input: '輸入', beautify: '美化 JSON', minify: '壓縮 JSON', expand: '全部展開', collapse: '全部收合' },
+                image: { title: '圖片處理工具', desc: '本地高效壓縮與格式轉換處理。', drop: '拖入多張圖片', quality: '品質 / 色彩深度', format: '格式', selectAll: '全選', zipDownload: '導出 ZIP', original: '原始圖', processed: '壓縮圖' },
+                generator: { title: '佔位圖片產生器', width: '寬度', height: '高度', format: '格式', bgColor: '背景顏色', textColor: '文字顏色', presets: '常用比例預設', ratioLabels: { '1:1': '正方形', '4:3': '經典比例', '16:9': '高清影片', '2:1': '橫幅廣告', '1:2': '縱向海報' } },
+                password: { title: '安全強密碼', desc: '生成高強度隨機密碼處理。', length: '長度', btn: '重新產生新密碼', strength: '密碼強度', upper: '大寫字母', lower: '小寫字母', numbers: '數字組合', symbols: '特殊符號', levels: ['太短', '弱', '中等', '強', '極度安全'] },
+                lorem: { title: '假字產生器', mode: '生成模式', variant: '字體標準', paragraphs: '段落數量', cn_only: '純中文', en_only: '純英文', mixed: '中英混合', traditional: '繁體', simplified: '簡體' }
+            }
+        };
+
+        // --- 全域工具掛載 ---
+        window.formatSize = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
+        window.showToast = (msg) => { const t = document.getElementById('toast'); if(!t) return; document.getElementById('toastMsg').innerText = msg; t.classList.remove('hidden'); setTimeout(() => t.classList.add('hidden'), 3000); };
+        window._copy = (val) => { const temp = document.createElement('textarea'); temp.value = val; document.body.appendChild(temp); temp.select(); document.execCommand('copy'); document.body.removeChild(temp); window.showToast(TRANSLATIONS[window.state.lang].common.copied); };
+        window.copyText = (id) => { const el = document.getElementById(id); const val = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ? el.value : el.innerText; window._copy(val); };
+
+        window.state = { 
+            lang: localStorage.getItem('devkit_lang') || 'en', 
+            activeTab: 'guide', 
+            imageItems: [], 
+            imageQuality: 80, 
+            outputFormat: 'original', 
+            loremVariant: 'hk', 
+            loremData: [], 
+            passOpts: { upper: true, lower: true, numbers: true, symbols: true }, 
+            genActivePreset: null 
+        };
+
+        // --- UI Rendering ---
+        window.render = function() {
+            const t = TRANSLATIONS[window.state.lang];
+            document.querySelectorAll('[data-t]').forEach(el => {
+                const key = el.getAttribute('data-t');
+                const val = key.split('.').reduce((obj, i) => obj ? obj[i] : null, t);
+                if (val) el.innerText = val;
+            });
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `content-${window.state.activeTab}`));
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                const isActive = window.state.activeTab === btn.getAttribute('data-tab');
+                btn.className = `nav-btn w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-200 ${isActive ? 'nav-btn-active' : 'nav-btn-inactive'}`;
+            });
+            document.getElementById('btnEn').className = `flex-1 py-2 text-xs font-black rounded-xl transition-all ${window.state.lang === 'en' ? 'bg-white shadow-sm text-indigo-600 border border-indigo-100' : 'text-slate-400'}`;
+            document.getElementById('btnZh').className = `flex-1 py-2 text-xs font-black rounded-xl transition-all ${window.state.lang === 'zh-Hant' ? 'bg-white shadow-sm text-indigo-600 border border-indigo-100' : 'text-slate-400'}`;
+            
+            if (window.state.activeTab === 'guide') renderGuide();
+            if (window.state.activeTab === 'image') { window.renderImageList(); window.updateFormatButtons(); }
+            if (window.state.activeTab === 'password') window.renderPassOpts();
+            if (window.state.activeTab === 'lorem') window.updateLoremUI();
+            if (window.state.activeTab === 'generator') window.renderGenPresets();
+        };
+
+        window.changeLang = function(l) { window.state.lang = l; localStorage.setItem('devkit_lang', l); window.render(); };
+        window.setActiveTab = function(tab, updateHash = true) { window.state.activeTab = tab; if (updateHash) { window.location.hash = tab; } window.render(); window.scrollTo(0, 0); };
+
+        function handleHashChange() {
+            const hash = window.location.hash.substring(1); const validTabs = ['guide', 'excel', 'json', 'image', 'generator', 'password', 'lorem'];
+            if (hash && validTabs.includes(hash)) { window.setActiveTab(hash, false); } else { window.setActiveTab('guide', true); }
+        }
+
+        // --- JSON logic ---
+        window.clearJSONInput = () => { document.getElementById('jsonRawInput').value = ''; document.getElementById('jsonFormattedTree').innerHTML = ''; document.getElementById('jsonError').classList.add('hidden'); };
+        window.validateJSONLive = () => { const raw = document.getElementById('jsonRawInput').value.trim(); const errEl = document.getElementById('jsonError'); if(!raw) return; try { JSON.parse(raw); errEl.classList.add('hidden'); } catch (e) { errEl.innerText = e.message; errEl.classList.remove('hidden'); } };
+        window.formatJSON = (type) => {
+            const raw = document.getElementById('jsonRawInput').value.trim(); const container = document.getElementById('jsonFormattedTree'); if(!raw) return;
+            try { const parsed = JSON.parse(raw); if (type === 'minify') { container.innerHTML = `<div class="json-string break-all text-left text-left">${JSON.stringify(parsed)}</div>`; } else { container.innerHTML = ''; container.appendChild(renderJSONNode(null, parsed, true)); } } catch (e) { document.getElementById('jsonError').innerText = e.message; document.getElementById('jsonError').classList.remove('hidden'); }
+        };
+        function renderJSONNode(key, value, isLast = true) {
+            const node = document.createElement('div'); node.className = 'json-tree-node text-left text-left'; const isCollapsible = typeof value === 'object' && value !== null; const isArray = Array.isArray(value);
+            const line = document.createElement('div'); line.className = 'json-line flex items-start gap-1 text-left text-left';
+            if (isCollapsible) {
+                const toggle = document.createElement('span'); toggle.className = 'json-tree-toggle'; toggle.innerHTML = '▾';
+                toggle.onclick = (e) => { e.stopPropagation(); const children = node.querySelector('.json-tree-children'); children.classList.toggle('hidden'); toggle.classList.toggle('collapsed'); toggle.innerHTML = toggle.classList.contains('collapsed') ? '▸' : '▾'; };
+                node.appendChild(toggle);
+            }
+            if (key !== null) { const keySpan = document.createElement('span'); keySpan.className = 'json-key text-left'; keySpan.innerText = `"${key}": `; line.appendChild(keySpan); }
+            if (isCollapsible) {
+                line.insertAdjacentHTML('beforeend', `<span class="text-slate-500">${isArray ? '[' : '{'}</span>`); node.appendChild(line);
+                const children = document.createElement('div'); children.className = 'json-tree-children text-left';
+                const entries = isArray ? value : Object.entries(value);
+                entries.forEach((item, index) => { const isLastChild = index === entries.length - 1; if (isArray) children.appendChild(renderJSONNode(null, item, isLastChild)); else children.appendChild(renderJSONNode(item[0], item[1], isLastChild)); });
+                node.appendChild(children); const footer = document.createElement('div'); footer.className = 'text-slate-500 text-left'; footer.innerText = (isArray ? ']' : '}') + (isLast ? '' : ','); node.appendChild(footer);
+            } else {
+                const valSpan = document.createElement('span');
+                if (typeof value === 'string') valSpan.className = 'json-string', valSpan.innerText = `"${value}"`;
+                else if (typeof value === 'number') valSpan.className = 'text-amber-400', valSpan.innerText = value;
+                else if (typeof value === 'boolean') valSpan.className = 'text-rose-400', valSpan.innerText = value;
+                else if (value === null) valSpan.className = 'text-slate-500', valSpan.innerText = 'null';
+                line.appendChild(valSpan); if (!isLast) { const comma = document.createElement('span'); comma.className = 'text-slate-500'; comma.innerText = ','; line.appendChild(comma); }
+                node.appendChild(line);
+            }
+            return node;
+        }
+        window.toggleAllJSON = (expand) => { document.querySelectorAll('.json-tree-toggle').forEach(t => { t.classList.toggle('collapsed', !expand); t.innerHTML = expand ? '▾' : '▸'; }); document.querySelectorAll('.json-tree-children').forEach(c => c.classList.toggle('hidden', !expand)); };
+        window.copyTreeJSON = () => { const raw = document.getElementById('jsonRawInput').value.trim(); if (raw) window._copy(JSON.stringify(JSON.parse(raw), null, 4)); };
+
+        // --- Image ---
+        window.handleImageUpload = (e) => { processImageFiles(Array.from(e.target.files)); e.target.value = ''; };
+        window.onDragOver = (e) => { e.preventDefault(); document.getElementById('imageDropZone').classList.add('border-emerald-400', 'bg-emerald-50/30'); };
+        window.onDragLeave = () => { document.getElementById('imageDropZone').classList.remove('border-emerald-400', 'bg-emerald-50/30'); };
+        window.onImageDrop = (e) => { e.preventDefault(); window.onDragLeave(); processImageFiles(Array.from(e.dataTransfer.files)); };
+        function processImageFiles(files) {
+            files.forEach(f => {
+                if(!f.type.startsWith('image/')) return; const id = Math.random().toString(36).substr(2, 9); const reader = new FileReader();
+                reader.onload = (ev) => { const item = { id, name: f.name, originalSrc: ev.target.result, originalMime: f.type, compressedSrc: null, originalSize: f.size, compressedSize: 0, status: 'processing', selected: true, currentFormat: null }; window.state.imageItems.push(item); compressImg(item); window.renderImageList(); }; reader.readAsDataURL(f);
+            });
+            document.getElementById('imageActionArea')?.classList.remove('hidden'); document.getElementById('imageSettingsArea')?.classList.remove('hidden');
+        }
+        function compressImg(item) {
+            const img = new Image(); img.src = item.originalSrc;
+            img.onload = () => {
+                const cvs = document.createElement('canvas'); cvs.width = img.width; cvs.height = img.height; const ctx = cvs.getContext('2d'); ctx.drawImage(img, 0, 0);
+                const q = window.state.imageQuality / 100; const targetFormat = window.state.outputFormat === 'original' ? item.originalMime : window.state.outputFormat;
+                if(targetFormat === 'image/png') { const data = ctx.getImageData(0,0,cvs.width,cvs.height); try { const buf = UPNG.encode([data.data.buffer], cvs.width, cvs.height, Math.max(2, 256 * q)); finishComp(item.id, new Blob([buf], {type:'image/png'}), 'image/png'); } catch(e) { cvs.toBlob(b => finishComp(item.id, b, 'image/png'), 'image/png'); } }
+                else { cvs.toBlob(b => finishComp(item.id, b, targetFormat), targetFormat, q); }
+            };
+        }
+        function finishComp(id, blob, format) { const r = new FileReader(); r.onload = ev => { const item = window.state.imageItems.find(i => i.id === id); if(item) { item.compressedSrc = ev.target.result; item.compressedSize = blob.size; item.status = 'done'; item.currentFormat = format; window.renderImageList(); } }; r.readAsDataURL(blob); }
+        window.renderImageList = () => {
+            const container = document.getElementById('imageList'); const t = TRANSLATIONS[window.state.lang]; if(!container) return;
+            container.innerHTML = window.state.imageItems.map(item => {
+                const ratio = item.compressedSize ? Math.max(0, ((item.originalSize - item.compressedSize) / item.originalSize) * 100).toFixed(1) : 0;
+                return `<div class="bg-white rounded-[2rem] border ${item.selected ? 'border-indigo-500 ring-4 ring-indigo-500/5 shadow-2xl' : 'border-slate-200'} transition-all overflow-hidden group relative flex flex-col text-left"><div class="absolute top-4 left-4 z-20"><input type="checkbox" ${item.selected ? 'checked' : ''} onchange="window.toggleItem('${item.id}')" class="w-6 h-6 rounded-xl border-slate-300 text-indigo-600 cursor-pointer"></div><button onclick="window.deleteSingleItem('${item.id}')" class="absolute top-4 right-4 z-20 p-2 bg-white/80 backdrop-blur-md text-slate-400 hover:text-red-500 rounded-xl active:scale-90 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button><div class="aspect-square bg-slate-50 relative overflow-hidden cursor-zoom-in flex items-center justify-center text-center" onclick="window.openLightbox('${item.id}')">${item.compressedSrc ? `<img src="${item.compressedSrc}" class="w-full h-full object-cover transition-transform duration-700 hover:scale-110">` : `<div class="w-full h-full animate-pulse bg-slate-100 text-center text-center"></div>`}<div class="absolute bottom-4 right-4 bg-slate-900/60 backdrop-blur-md text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest text-center">${(item.currentFormat||'').split('/')[1]||'PNG'}</div></div><div class="p-5 space-y-4 text-left"><p class="text-sm font-black truncate">${item.name}</p><div class="flex justify-between items-end text-left"><div class="text-[10px] text-slate-400 font-bold leading-tight space-y-1 text-left text-left"><p>${t.image.original}: ${window.formatSize(item.originalSize)}</p><p class="text-emerald-600 font-black">${t.image.processed}: ${window.formatSize(item.compressedSize)}</p></div><div class="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-xl text-[10px] font-black border border-emerald-100">-${ratio}%</div></div></div></div>`; }).join('');
+        };
+        window.deleteSingleItem = (id) => { window.state.imageItems = window.state.imageItems.filter(i => i.id !== id); window.renderImageList(); if(window.state.imageItems.length === 0) { document.getElementById('imageActionArea')?.classList.add('hidden'); document.getElementById('imageSettingsArea')?.classList.add('hidden'); } };
+        window.toggleSelectAll = (checked) => { window.state.imageItems.forEach(item => item.selected = checked); window.renderImageList(); };
+        window.updateQualityLabel = (v) => { window.state.imageQuality = v; document.getElementById('qVal').innerText = v; };
+        window.applyQuality = (v) => { window.state.imageQuality = v; window.state.imageItems.forEach(i => compressImg(i)); };
+        window.setFormat = (f) => { window.state.outputFormat = f; window.updateFormatButtons(); window.state.imageItems.forEach(i => compressImg(i)); };
+        window.updateFormatButtons = () => { const btns = { 'original': 'fmtOriginal', 'image/webp': 'fmtWebp', 'image/png': 'fmtPng', 'image/jpeg': 'fmtJpeg' }; Object.values(btns).forEach(id => document.getElementById(id)?.classList.remove('bg-white', 'shadow-lg', 'text-indigo-600')); document.getElementById(btns[window.state.outputFormat])?.classList.add('bg-white', 'shadow-lg', 'text-indigo-600'); };
+        window.openLightbox = (id) => {
+            const item = window.state.imageItems.find(x => x.id === id); if(!item || !item.compressedSrc) return;
+            const t = TRANSLATIONS[window.state.lang];
+            const lb = document.getElementById('lightbox'); document.getElementById('lightboxImgOriginal').src = item.originalSrc; document.getElementById('lightboxImgCompressed').src = item.compressedSrc;
+            const ratio = item.compressedSize ? Math.max(0, ((item.originalSize - item.compressedSize) / item.originalSize) * 100).toFixed(1) : 0;
+            document.getElementById('lightboxInfo').innerHTML = `<div class="flex flex-col md:flex-row justify-between items-center gap-6 text-left"><div class="space-y-1"><p class="text-xl font-black truncate max-w-sm text-left">${item.name}</p><p class="text-[11px] text-slate-400 uppercase tracking-widest text-left">${t.image.original}: ${window.formatSize(item.originalSize)} ➔ ${t.image.processed}: <span class="text-emerald-400">${window.formatSize(item.compressedSize)}</span></p></div><div class="flex items-center gap-4 text-left"><div class="bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-2xl text-sm font-black">-${ratio}%</div><button onclick="window.downloadSingle('${item.id}')" class="bg-white text-slate-900 px-10 py-3 rounded-[1.25rem] text-sm font-black hover:bg-indigo-50 transition-all shadow-xl">下載</button></div></div>`;
+            lb.classList.remove('hidden'); lb.classList.add('flex');
+        };
+        window.closeLightbox = () => { const lb = document.getElementById('lightbox'); lb.classList.add('hidden'); lb.classList.remove('flex'); };
+        window.downloadSingle = (id) => { const item = window.state.imageItems.find(x => x.id === id); if(!item) return; const ext = item.currentFormat.split('/')[1].replace('jpeg', 'jpg'); const a = document.createElement('a'); a.href = item.compressedSrc; a.download = `${item.name.split('.')[0]}.${ext}`; a.click(); };
+        window.downloadZip = async () => { const zip = new JSZip(); window.state.imageItems.filter(i => i.selected && i.compressedSrc).forEach(i => { const ext = i.currentFormat.split('/')[1].replace('jpeg', 'jpg'); zip.file(`${i.name.split('.')[0]}.${ext}`, i.compressedSrc.split(',')[1], {base64: true}); }); const blob = await zip.generateAsync({type: 'blob'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `export-${Date.now()}.zip`; a.click(); };
+        window.clearAllImages = () => { window.state.imageItems = []; window.renderImageList(); document.getElementById('imageActionArea')?.classList.add('hidden'); document.getElementById('imageSettingsArea')?.classList.add('hidden'); window.showToast('Cleared'); };
+
+        // --- Guide, Generator, Password, Lorem ---
+        function renderGuide() {
+            const t = TRANSLATIONS[window.state.lang];
+            document.getElementById('guideSteps').innerHTML = [1,2,3,4].map(s => `<div class="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all group text-left"><div class="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-xl mb-6 group-hover:bg-indigo-600 group-hover:text-white transition-all text-center">${s}</div><p class="font-bold text-slate-700 leading-snug text-left">${t.guide['step'+s]}</p></div>`).join('');
+            document.getElementById('toolDetails').innerHTML = ['excel', 'json', 'image', 'generator', 'password', 'lorem'].map(k => `<div class="bg-white p-8 rounded-[2.5rem] border border-slate-200 flex gap-6 items-start hover:border-indigo-200 transition-colors text-left text-left"><div class="w-10 h-10 rounded-full bg-slate-50 flex-shrink-0 flex items-center justify-center text-indigo-50 text-left text-left text-left"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div><div class="space-y-2 text-left"><h4 class="font-black text-slate-900 uppercase text-xs tracking-widest text-left">${TRANSLATIONS[window.state.lang].nav[k]}</h4><p class="text-slate-500 text-sm leading-relaxed font-medium text-left">${t.guide.details[k]}</p></div></div>`).join('');
+        }
+        window.renderGenPresets = () => {
+            const presets = [{ id: '1:1', w: 1200, h: 1200 }, { id: '4:3', w: 1200, h: 900 }, { id: '16:9', w: 1280, h: 720 }, { id: '2:1', w: 1200, h: 600 }, { id: '1:2', w: 600, h: 1200 }];
+            const t = TRANSLATIONS[window.state.lang];
+            document.getElementById('genPresetsContainer').innerHTML = presets.map(p => { 
+                const isActive = window.state.genActivePreset === p.id;
+                const visual = { '1:1': '16px', '4:3': '12px', '16:9': '9px', '2:1': '8px', '1:2': '16px' };
+                const visualW = { '1:1': '16px', '4:3': '16px', '16:9': '16px', '2:1': '16px', '1:2': '8px' };
+                return `<div onclick="window.setGenPreset('${p.id}', ${p.w}, ${p.h})" class="ratio-card ${isActive ? 'active' : ''} text-center"><div class="ratio-visual text-indigo-500" style="width: ${visualW[p.id]}; height: ${visual[p.id]}; border: 2px solid currentColor; border-radius: 4px; background: transparent; opacity: 0.8;"></div><span class="text-xs font-black text-center">${p.id}</span><span class="text-[9px] opacity-60 font-bold uppercase text-center">${t.generator.ratioLabels[p.id]}</span></div>`; 
+            }).join('');
+        };
+        window.setGenPreset = (id, w, h) => { window.state.genActivePreset = id; document.getElementById('genWidth').value = w; document.getElementById('genHeight').value = h; window.updateGen(); window.renderGenPresets(); };
+        window.onGenInputChanged = () => { window.state.genActivePreset = null; window.updateGen(); window.renderGenPresets(); };
+        window.updateGen = () => { const w = parseInt(document.getElementById('genWidth').value) || 100, h = parseInt(document.getElementById('genHeight').value) || 100, bg = document.getElementById('genBg').value, tc = document.getElementById('genTxtColor').value, cvs = document.createElement('canvas'); cvs.width = w; cvs.height = h; const ctx = cvs.getContext('2d'); ctx.fillStyle = bg; ctx.fillRect(0,0,w,h); ctx.fillStyle = tc; ctx.font = `bold ${Math.min(w,h)/8}px Inter`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(`${w}x${h}`, w/2, h/2); document.getElementById('genPreview').src = cvs.toDataURL(); };
+        window.downloadGen = () => { const a = document.createElement('a'); a.href = document.getElementById('genPreview').src; a.download='mock.png'; a.click(); };
+        
+        window.renderPassOpts = () => {
+            const opts = ['upper', 'lower', 'numbers', 'symbols'], t = TRANSLATIONS[window.state.lang], labels = { upper: 'A-Z', lower: 'a-z', numbers: '0-9', symbols: '!@#$' };
+            document.getElementById('passOptsContainer').innerHTML = opts.map(o => `<div onclick="window.togglePassOpt('${o}')" class="pass-opt-card ${window.state.passOpts[o] ? 'active' : ''} text-left"><div class="flex flex-col text-left"><span class="text-slate-800 font-black text-left">${t.password[o]}</span><span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-left">${labels[o]}</span></div></div>`).join('');
+            window.generatePass();
+        };
+        window.togglePassOpt = (o) => { window.state.passOpts[o] = !window.state.passOpts[o]; window.renderPassOpts(); };
+        window.updatePassUI = () => { document.getElementById('passLenVal').innerText = document.getElementById('passLen').value; window.generatePass(); };
+        window.copyPassValue = () => { window._copy(document.getElementById('passValText').innerText); };
+        window.generatePass = () => {
+            const len = parseInt(document.getElementById('passLen').value), pool = { lower: 'abcdefghijklmnopqrstuvwxyz', upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', numbers: '0123456789', symbols: '!@#$%^&*()_+~' };
+            let chars = ''; Object.keys(pool).forEach(k => { if(window.state.passOpts[k]) chars += pool[k]; }); if(!chars) chars = pool.lower;
+            let res = ''; for(let i=0; i<len; i++) res += chars.charAt(Math.floor(Math.random()*chars.length)); document.getElementById('passValText').innerText = res;
+            const t = TRANSLATIONS[window.state.lang]; let score = 0; if (len >= 12) score++; if (window.state.passOpts.numbers) score++; if (window.state.passOpts.symbols) score++; if (window.state.passOpts.upper && window.state.passOpts.lower) score++;
+            const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-emerald-500', 'bg-indigo-500'], levelIdx = Math.min(score, 4);
+            document.getElementById('strengthBar').className = `h-full rounded-full transition-all duration-500 ${colors[levelIdx]}`; document.getElementById('strengthBar').style.width = (levelIdx+1)*20 + '%';
+            document.getElementById('strengthText').innerText = t.password.levels[levelIdx]; document.getElementById('strengthText').className = `font-black uppercase tracking-widest text-xs ${colors[levelIdx].replace('bg-', 'text-')}`;
+        };
+
+        window.updateLoremUI = () => {
+            const t = TRANSLATIONS[window.state.lang];
+            const ms = document.getElementById('loremMode'); if(!ms) return;
+            const currentVal = ms.value || 'mixed';
+            ms.innerHTML = `<option value="cn">${t.lorem.cn_only}</option><option value="en">${t.lorem.en_only}</option><option value="mixed">${t.lorem.mixed}</option>`;
+            ms.value = currentVal;
+            window.generateLorem();
+        };
+        window.setLoremVar = (v) => { window.state.loremVariant = v; window.generateLorem(); };
+        window.generateLorem = async function() {
+            const count = parseInt(document.getElementById('loremPara').value) || 3;
+            const mode = document.getElementById('loremMode')?.value || 'cn';
+            const enLib = ["Modern development ecosystems thrive on automated toolsets.", "Efficient algorithms are the backbone of scalable software.", "Designing with user accessibility in mind is no longer optional."];
+            const cnLib = ["在快速變化的科技時代，掌握核心工具是開發者的必修課。", "優秀的產品設計應該兼具美學與極致的使用者體驗。", "網絡安全不僅是技術問題，更是企業誠信的基石。"];
+            let result = []; for(let p=0; p<count; p++) { let sArr = []; for(let i=0; i<4; i++) { if(mode === 'en') sArr.push(enLib[Math.floor(Math.random()*enLib.length)]); else if(mode === 'cn') sArr.push(cnLib[Math.floor(Math.random()*cnLib.length)]); else sArr.push(Math.random()>0.5 ? cnLib[Math.floor(Math.random()*cnLib.length)] : enLib[Math.floor(Math.random()*enLib.length)]); } result.push(sArr.join(' ')); }
+            if(window.OpenCC && window.state.loremVariant === 'cn') { const conv = OpenCC.Converter({ from: 'hk', to: 'cn' }); result = result.map(p => conv(p)); }
+            window.state.loremData = result; document.getElementById('loremResult').innerHTML = result.map(p => `<p class="mb-6 font-serif text-xl text-left text-left">${p}</p>`).join('');
+        };
+        window.copyLorem = () => window._copy(window.state.loremData.join('\n\n'));
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const sidebar = document.getElementById('sidebar'), overlay = document.getElementById('sidebarOverlay'), openBtn = document.getElementById('openSidebar'), closeBtn = document.getElementById('closeSidebar');
+            if(openBtn) openBtn.onclick = () => { sidebar.classList.remove('-translate-x-full'); overlay.classList.remove('hidden'); };
+            if(closeBtn) closeBtn.onclick = () => { sidebar.classList.add('-translate-x-full'); overlay.classList.add('hidden'); };
+            if(overlay) overlay.onclick = () => { sidebar.classList.add('-translate-x-full'); overlay.classList.add('hidden'); };
+            document.getElementById('navLinks').addEventListener('click', (e) => { const btn = e.target.closest('button'); if(btn) window.setActiveTab(btn.getAttribute('data-tab')); });
+            window.addEventListener('hashchange', handleHashChange); handleHashChange(); window.render(); window.updateGen();
+        });
+    </script>
+</body>
+</html>
