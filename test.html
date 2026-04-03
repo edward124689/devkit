@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圖片批次壓縮與轉換工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 JSZip 用於打包下載全部圖片 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* 自定義滾動條 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .dropzone-active {
+            border-color: #3b82f6 !important;
+            background-color: #eff6ff !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800 font-sans p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto space-y-6">
+        
+        <!-- 標題區塊 -->
+        <div class="text-center space-y-2">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">
+                <i class="fa-regular fa-image text-blue-500 mr-2"></i>圖片批次壓縮與轉換
+            </h1>
+            <p class="text-gray-500">在本地端將圖片轉為 JPG 格式、調整尺寸並進行壓縮，保護您的隱私。</p>
+        </div>
+
+        <!-- 控制面板 -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6 items-center justify-between">
+            <div class="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-600">寬度 (px):</label>
+                    <input type="number" id="targetWidth" value="512" class="w-20 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-600">高度 (px):</label>
+                    <input type="number" id="targetHeight" value="512" class="w-20 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm font-medium text-gray-600" title="保持原圖比例，將以包含的方式縮放">
+                        <input type="checkbox" id="keepAspect" class="rounded text-blue-500 focus:ring-blue-500 mr-1" checked>
+                        保持比例
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 w-full md:w-auto">
+                <label class="text-sm font-medium text-gray-600 whitespace-nowrap">JPG 壓縮品質: <span id="qualityVal" class="text-blue-600 font-bold">80%</span></label>
+                <input type="range" id="quality" min="0.1" max="1.0" step="0.05" value="0.8" class="w-full md:w-32 accent-blue-500">
+            </div>
+        </div>
+
+        <!-- 拖放上傳區 -->
+        <div id="dropzone" class="border-2 border-dashed border-gray-300 rounded-3xl p-12 text-center bg-white cursor-pointer transition-all duration-200 hover:border-blue-400 hover:bg-blue-50 relative">
+            <input type="file" id="fileInput" multiple accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+            <div class="pointer-events-none space-y-4">
+                <div class="w-16 h-16 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-700">點擊或拖放圖片至此處</h3>
+                <p class="text-sm text-gray-400">支援 PNG, JPG, WEBP 等格式 (自動轉為 JPG)</p>
+            </div>
+        </div>
+
+        <!-- 操作與狀態區 -->
+        <div id="actionArea" class="hidden flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div class="text-sm font-medium text-gray-600">
+                已處理: <span id="processedCount" class="text-blue-600 font-bold text-lg">0</span> 張圖片
+            </div>
+            <div class="space-x-3">
+                <button id="clearBtn" class="px-4 py-2 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors">
+                    <i class="fa-solid fa-trash-can mr-1"></i> 清空
+                </button>
+                <button id="downloadAllBtn" class="px-5 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium shadow-md shadow-blue-500/30 transition-all active:scale-95">
+                    <i class="fa-solid fa-file-zipper mr-1"></i> 打包下載 (ZIP)
+                </button>
+            </div>
+        </div>
+
+        <!-- 結果展示區 (Grid) -->
+        <div id="resultsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <!-- 處理後的圖片卡片將會插入到這裡 -->
+        </div>
+
+    </div>
+
+    <!-- 圖片處理與互動邏輯 -->
+    <script>
+        // DOM 元素
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const resultsGrid = document.getElementById('resultsGrid');
+        const targetWidthInput = document.getElementById('targetWidth');
+        const targetHeightInput = document.getElementById('targetHeight');
+        const keepAspectInput = document.getElementById('keepAspect');
+        const qualityInput = document.getElementById('quality');
+        const qualityVal = document.getElementById('qualityVal');
+        const actionArea = document.getElementById('actionArea');
+        const processedCountSpan = document.getElementById('processedCount');
+        const clearBtn = document.getElementById('clearBtn');
+        const downloadAllBtn = document.getElementById('downloadAllBtn');
+
+        // 狀態變數
+        let processedImages = [];
+
+        // 更新品質顯示數值
+        qualityInput.addEventListener('input', (e) => {
+            qualityVal.textContent = Math.round(e.target.value * 100) + '%';
+        });
+
+        // 拖放事件處理
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => {
+                dropzone.classList.add('dropzone-active');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => {
+                dropzone.classList.remove('dropzone-active');
+            }, false);
+        });
+
+        // 處理放下的檔案
+        dropzone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        });
+
+        // 處理點擊選擇的檔案
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+            // 清空 input，以便可以重複選擇相同檔案
+            fileInput.value = '';
+        });
+
+        // 核心：過濾並處理檔案
+        async function handleFiles(files) {
+            const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+            
+            if (imageFiles.length === 0) return;
+
+            for (let i = 0; i < imageFiles.length; i++) {
+                try {
+                    const result = await processImage(imageFiles[i]);
+                    processedImages.push(result);
+                    renderResultCard(result);
+                    updateUI();
+                } catch (error) {
+                    console.error("處理圖片時發生錯誤:", error);
+                }
+            }
+        }
+
+        // 格式化檔案大小
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        // 核心：圖片調整大小與轉換邏輯
+        function processImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        
+                        let tw = parseInt(targetWidthInput.value) || 512;
+                        let th = parseInt(targetHeightInput.value) || 512;
+                        let drawW = tw;
+                        let drawH = th;
+                        let offsetX = 0;
+                        let offsetY = 0;
+
+                        if (keepAspectInput.checked) {
+                            // 保持比例 (類似 object-fit: contain)
+                            const ratio = Math.min(tw / img.width, th / img.height);
+                            drawW = img.width * ratio;
+                            drawH = img.height * ratio;
+                            
+                            // 置中
+                            offsetX = (tw - drawW) / 2;
+                            offsetY = (th - drawH) / 2;
+                        }
+
+                        // 設定 Canvas 最終尺寸
+                        canvas.width = tw;
+                        canvas.height = th;
+
+                        // 填充白色背景 (防止 PNG 透明底變成黑色)
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                        // 啟用平滑縮放
+                        ctx.imageSmoothingEnabled = true;
+                        ctx.imageSmoothingQuality = 'high';
+
+                        // 繪製圖片
+                        ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+
+                        // 輸出設定
+                        const quality = parseFloat(qualityInput.value) || 0.8;
+                        
+                        canvas.toBlob((blob) => {
+                            if (!blob) {
+                                reject(new Error("Canvas 轉換 Blob 失敗"));
+                                return;
+                            }
+                            
+                            // 取得新的檔名 (.jpg)
+                            const originalName = file.name;
+                            const newName = originalName.substring(0, originalName.lastIndexOf('.')) + '.jpg';
+                            
+                            // 計算壓縮率
+                            const compressionRate = ((file.size - blob.size) / file.size * 100).toFixed(1);
+
+                            resolve({
+                                id: Date.now() + Math.random().toString(36).substr(2, 9),
+                                originalName: originalName,
+                                newName: newName || 'image.jpg',
+                                blob: blob,
+                                url: URL.createObjectURL(blob),
+                                originalSize: file.size,
+                                newSize: blob.size,
+                                dimensions: `${tw}x${th}`,
+                                rate: compressionRate
+                            });
+                        }, 'image/jpeg', quality);
+                    };
+                    img.onerror = () => reject(new Error("圖片載入失敗"));
+                };
+                reader.onerror = () => reject(new Error("檔案讀取失敗"));
+            });
+        }
+
+        // 渲染單個結果卡片
+        function renderResultCard(data) {
+            const card = document.createElement('div');
+            card.className = "bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col transition-all hover:shadow-md";
+            
+            // 判斷容量是變大還是變小，給予不同顏色
+            const sizeColorClass = data.newSize < data.originalSize ? 'text-green-600' : 'text-red-500';
+            const rateText = data.newSize < data.originalSize 
+                ? `⬇ ${data.rate}%` 
+                : `⬆ ${Math.abs(data.rate)}%`;
+
+            card.innerHTML = `
+                <div class="h-40 bg-gray-100 relative group border-b border-gray-100 flex items-center justify-center p-2">
+                    <img src="${data.url}" class="max-h-full max-w-full object-contain rounded drop-shadow-sm" alt="預覽圖">
+                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                        <a href="${data.url}" download="${data.newName}" class="bg-white text-gray-800 px-4 py-2 rounded-lg font-medium text-sm hover:bg-blue-50 transition-colors shadow-lg">
+                            <i class="fa-solid fa-download mr-1"></i> 下載
+                        </a>
+                    </div>
+                </div>
+                <div class="p-3 flex-1 flex flex-col justify-between space-y-2">
+                    <p class="text-xs font-semibold text-gray-700 truncate" title="${data.newName}">${data.newName}</p>
+                    <div class="text-[11px] text-gray-500 space-y-1">
+                        <div class="flex justify-between">
+                            <span>尺寸:</span>
+                            <span class="font-medium text-gray-700">${data.dimensions}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>大小:</span>
+                            <div class="text-right">
+                                <span class="line-through text-gray-400 mr-1">${formatBytes(data.originalSize)}</span>
+                                <span class="font-bold ${sizeColorClass}">${formatBytes(data.newSize)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            resultsGrid.prepend(card);
+        }
+
+        // 更新 UI 狀態
+        function updateUI() {
+            processedCountSpan.textContent = processedImages.length;
+            if (processedImages.length > 0) {
+                actionArea.classList.remove('hidden');
+            } else {
+                actionArea.classList.add('hidden');
+            }
+        }
+
+        // 清空所有結果
+        clearBtn.addEventListener('click', () => {
+            // 釋放記憶體中的 URL
+            processedImages.forEach(img => URL.revokeObjectURL(img.url));
+            processedImages = [];
+            resultsGrid.innerHTML = '';
+            updateUI();
+        });
+
+        // 打包下載全部 (使用 JSZip)
+        downloadAllBtn.addEventListener('click', async () => {
+            if (processedImages.length === 0) return;
+            
+            // 按鈕狀態變更
+            const originalText = downloadAllBtn.innerHTML;
+            downloadAllBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> 打包中...`;
+            downloadAllBtn.disabled = true;
+
+            try {
+                const zip = new JSZip();
+                
+                processedImages.forEach((img, index) => {
+                    // 處理檔名重複問題
+                    let fileName = img.newName;
+                    if (processedImages.findIndex(i => i.newName === fileName) !== index) {
+                        fileName = fileName.replace('.jpg', `_${index}.jpg`);
+                    }
+                    zip.file(fileName, img.blob);
+                });
+
+                const content = await zip.generateAsync({ type: "blob" });
+                
+                // 觸發下載
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = `compressed_images_${Date.now()}.zip`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+
+            } catch (error) {
+                console.error("ZIP 產生失敗:", error);
+                alert("打包壓縮檔案時發生錯誤。");
+            } finally {
+                downloadAllBtn.innerHTML = originalText;
+                downloadAllBtn.disabled = false;
+            }
+        });
+
+    </script>
+</body>
+</html>
